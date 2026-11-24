@@ -1,42 +1,67 @@
 """One Line of Earned Pride entry.
 
-Copies the single original line from entry.txt (next to this file) to
-$MAKEFUN_OUTPUT_DIR/entry.txt (or /output/entry.txt when the variable
-is not set), byte for byte. The line is 1-240 characters, UTF-8, not
-only whitespace, as the sealed gate requires. Stdlib only.
+The single original line lives in entry.txt next to this file. This
+script reads it, checks it fits the sealed gate (1-240 characters,
+UTF-8, one line, not only whitespace), then writes an exact byte
+copy to $MAKEFUN_OUTPUT_DIR/entry.txt, falling back to
+/output/entry.txt when that variable is not set. After writing, the
+copy is read back and compared by SHA-256 so a partial write can
+never pass silently. Stdlib only.
 """
 
 import hashlib
 import os
-import sys
 
 
-def main():
-    here = os.path.dirname(os.path.abspath(__file__))
-    src_path = os.path.join(here, "entry.txt")
-    with open(src_path, "rb") as f:
-        data = f.read()
-    text = data.decode("utf-8")
-    stripped = text.strip()
-    if not 1 <= len(stripped) <= 240:
+def source_file():
+    folder = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(folder, "entry.txt")
+
+
+def load_line_bytes(path):
+    with open(path, "rb") as handle:
+        return handle.read()
+
+
+def decode_line(raw):
+    return raw.decode("utf-8")
+
+
+def check_line(text):
+    cleaned = text.strip()
+    if not 1 <= len(cleaned) <= 240:
         raise ValueError(
-            f"entry must be 1-240 characters, got {len(stripped)}"
+            f"entry must be 1-240 characters, got {len(cleaned)}"
         )
-    if not stripped:
+    if not cleaned:
         raise ValueError("entry must not be only whitespace")
-    if text != stripped:
+    if text != cleaned:
         raise ValueError("entry.txt must hold exactly one line")
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, "entry.txt")
-    with open(out_path, "wb") as f:
-        f.write(data)
-    with open(out_path, "rb") as f:
-        written = f.read()
-    if hashlib.sha256(written).hexdigest() != hashlib.sha256(data).hexdigest():
+    return cleaned
+
+
+def output_folder():
+    return os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+
+
+def store_copy(raw, directory):
+    os.makedirs(directory, exist_ok=True)
+    target = os.path.join(directory, "entry.txt")
+    with open(target, "wb") as handle:
+        handle.write(raw)
+    with open(target, "rb") as handle:
+        stored = handle.read()
+    if hashlib.sha256(stored).hexdigest() != hashlib.sha256(raw).hexdigest():
         raise ValueError("output is not byte-identical to entry.txt")
-    print(f"wrote {len(data)} bytes ({len(text)} chars) to {out_path}")
+    return target
+
+
+def run():
+    raw = load_line_bytes(source_file())
+    text = check_line(decode_line(raw))
+    target = store_copy(raw, output_folder())
+    print(f"wrote {len(raw)} bytes ({len(text)} chars) to {target}")
 
 
 if __name__ == "__main__":
-    main()
+    run()
